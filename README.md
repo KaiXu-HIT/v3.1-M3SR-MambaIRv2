@@ -1,3 +1,9 @@
+# GRS-MambaSR v3.0 (RGB + Depth, x4)
+
+Implementation based on RGB baseline `d84240a`. See [training, testing and verification guide](docs/GRS_MambaSR_GUIDE.md) for the v3.0 commands and specification mapping.
+
+---
+
 <p align="center">
     <img src="assets/logo.png" width="300">
 </p>

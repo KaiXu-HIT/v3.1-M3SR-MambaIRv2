@@ -238,13 +238,16 @@ class ASSM(nn.Module):
             nn.LogSoftmax(dim=-1)
         )
 
-    def forward(self, x, x_size, token):
+    def forward(self, x, x_size, token, geometry_route_bias=None):
         B, n, C = x.shape
         H, W = x_size
 
         full_embedding = self.embeddingB.weight @ token.weight  # [128, C]
 
         pred_route = self.route(x)  # [B, HW, num_token]
+        # GRS: stage-level reliability-weighted geometry bias, absent for RGB baseline.
+        if geometry_route_bias is not None:
+            pred_route = pred_route + geometry_route_bias
         cls_policy = F.gumbel_softmax(pred_route, hard=True, dim=-1)  # [B, HW, num_token]
 
         prompt = torch.matmul(cls_policy, full_embedding).view(B, n, self.d_state)
@@ -498,7 +501,8 @@ class AttentiveLayer(nn.Module):
 
         # part2: Attentive State Space
         shortcut = x
-        x_aca = self.assm(self.norm3(x), x_size, self.embeddingA) + x
+        x_aca = self.assm(self.norm3(x), x_size, self.embeddingA,
+                          geometry_route_bias=params.get("geometry_route_bias")) + x
         x = x_aca + self.convffn2(self.norm4(x_aca), x_size)
         x = shortcut * self.scale2 + x
 
