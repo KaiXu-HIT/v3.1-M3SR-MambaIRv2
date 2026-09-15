@@ -1,6 +1,14 @@
-# GRS-MambaSR v3.0 (RGB + Depth, x4)
+# GTSS-MambaSR v3.1 (RGB + Depth, x4)
 
-Implementation based on RGB baseline `d84240a`. See [training, testing and verification guide](docs/GRS_MambaSR_GUIDE.md) for the v3.0 commands and specification mapping.
+GTSS uses scalar depth transitions along each ASSM's actual semantic scan path to add a bounded pre-softplus dts bias. The RGB route and B/C projection formulas are unchanged. Only tiny GRE + 18 scalar beta parameters are added (1,779 total).
+
+- [v3.1 训练、测试与权重预留说明](docs/GTSS_MambaSR_GUIDE.md)
+- [v3.1 原始实现方案](docs/GTSS_MambaSR_SPEC.md)
+- [v3.1 检查记录](docs/GTSS_VERIFICATION.md)
+
+Use `train_GTSS_MambaSR_x4.yml` / `test_GTSS_MambaSR_x4.yml`. Historical v3.0 GRS is retained only as a separate comparison model, not inside GTSS. Its checkpoint is needed only when you request the three-model evaluation.
+
+Repository: https://github.com/KaiXu-HIT/v3.1-M3SR-MambaIRv2
 
 ---
 

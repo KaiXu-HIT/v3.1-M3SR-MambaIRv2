@@ -156,13 +156,14 @@ def main():
     random.seed(10)
     np.random.seed(10)
     if a.cpu_reference:
-        base=load_isolated((ROOT/'basicsr/archs/mambairv2_arch.py').read_text())
+        base=load_isolated((ROOT/'basicsr/archs/legacy_grs/mambairv2_v30.py').read_text())
         grs=load_isolated((ROOT/'basicsr/archs/grs_mambairv2_arch.py').read_text(),dict(MambaIRv2=base.MambaIRv2))
         device='cpu'
     else:
         if not torch.cuda.is_available():
             raise RuntimeError('CUDA unavailable; local checks require --cpu-reference.')
-        from basicsr.archs import mambairv2_arch as base, grs_mambairv2_arch as grs
+        from basicsr.archs.legacy_grs import mambairv2_v30 as base
+        from basicsr.archs import grs_mambairv2_arch as grs
         device='cuda'
     cfg=yaml.safe_load((ROOT/'options/train/mambairv2/train_GRS_MambaSR_x4.yml').read_text())
     baseline_cfg=yaml.safe_load((ROOT/'options/train/mambairv2/train_S0_RGB_MambaIRv2_x4.yml').read_text())

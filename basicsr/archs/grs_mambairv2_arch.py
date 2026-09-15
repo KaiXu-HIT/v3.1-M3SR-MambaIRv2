@@ -1,4 +1,4 @@
-"""GRS-MambaSR: asymmetric geometry guidance on the d84240a RGB backbone.
+"""LEGACY v3.0 evaluation model; the active v3.1 model is GTSSMambaIRv2.
 
 Only ASSB 2/4/6 receive RAGA and GCR. Each stage shares one geometry
 projection/rho across its six ASSMs; all RGB routing dictionaries stay separate.
@@ -7,7 +7,7 @@ Depth must already be P2/P98-normalized using the complete LR depth image.
 import torch
 from torch import nn
 from torch.nn import functional as F
-from basicsr.archs.mambairv2_arch import MambaIRv2
+from basicsr.archs.legacy_grs.mambairv2_v30 import MambaIRv2
 from basicsr.utils.registry import ARCH_REGISTRY
 
 

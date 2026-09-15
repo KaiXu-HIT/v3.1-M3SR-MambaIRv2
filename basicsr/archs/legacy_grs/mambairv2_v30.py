@@ -1,3 +1,4 @@
+"""Frozen v3.0 backbone (697f97a); never used by GTSS or RGB baseline."""
 import math
 import numpy as np
 import torch
@@ -210,9 +211,6 @@ class ASSM(nn.Module):
         self.input_resolution = input_resolution
         self.num_tokens = num_tokens
         self.inner_rank = inner_rank
-        # GTSS attaches one independent scalar controller only to selected ASSMs.
-        # None adds no RGB-baseline parameters or random initialization.
-        self.geometry_controller = None
 
         # Mamba params
         self.expand = mlp_ratio
@@ -241,13 +239,16 @@ class ASSM(nn.Module):
             nn.LogSoftmax(dim=-1)
         )
 
-    def forward(self, x, x_size, token, depth=None, confidence=None, enable_gtss=False):
+    def forward(self, x, x_size, token, geometry_route_bias=None):
         B, n, C = x.shape
         H, W = x_size
 
         full_embedding = self.embeddingB.weight @ token.weight  # [128, C]
 
         pred_route = self.route(x)  # [B, HW, num_token]
+        # GRS: stage-level reliability-weighted geometry bias, absent for RGB baseline.
+        if geometry_route_bias is not None:
+            pred_route = pred_route + geometry_route_bias
         cls_policy = F.gumbel_softmax(pred_route, hard=True, dim=-1)  # [B, HW, num_token]
 
         prompt = torch.matmul(cls_policy, full_embedding).view(B, n, self.d_state)
@@ -263,17 +264,7 @@ class ASSM(nn.Module):
         x = x.view(B, cc, -1).contiguous().permute(0, 2, 1)  # b,n,c
 
         semantic_x = semantic_neighbor(x, x_sort_indices) # SGN-unfold
-        # GTSS: generate transitions INSIDE this ASSM using its actual sorting.
-        # RGB route/policy/prompt/sort and B/C projections remain unchanged.
-        if enable_gtss:
-            if self.geometry_controller is None or depth is None or confidence is None:
-                raise ValueError('Enabled GTSS requires its controller, depth and confidence.')
-            geometry_transition = self.geometry_controller(depth, confidence, x_sort_indices)
-            y = self.selectiveScan(semantic_x, prompt,
-                                   geometry_transition=geometry_transition,
-                                   beta=self.geometry_controller.beta)
-        else:
-            y = self.selectiveScan(semantic_x, prompt)
+        y = self.selectiveScan(semantic_x, prompt)
         y = self.out_proj(self.out_norm(y))
         x = semantic_neighbor(y, x_sort_indices_reverse) # SGN-fold
 
@@ -378,7 +369,7 @@ class Selective_Scan(nn.Module):
         D._no_weight_decay = True
         return D
 
-    def forward_core(self, x: torch.Tensor, prompt, geometry_transition=None, beta=None):
+    def forward_core(self, x: torch.Tensor, prompt):
         B, L, C = x.shape
         K = 1  # mambairV2 needs noly 1 scan
         xs = x.permute(0, 2, 1).view(B, 1, C, L).contiguous()  # B, 1, C ,L
@@ -386,12 +377,6 @@ class Selective_Scan(nn.Module):
         x_dbl = torch.einsum("b k d l, k c d -> b k c l", xs.view(B, K, -1, L), self.x_proj_weight)
         dts, Bs, Cs = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=2)
         dts = torch.einsum("b k r l, k d r -> b k d l", dts.view(B, K, -1, L), self.dt_projs_weight)
-        if geometry_transition is not None:
-            if geometry_transition.shape != (B, 1, L) or beta is None or beta.numel() != 1:
-                raise ValueError('GTSS expects [B,1,L] transitions and one scalar beta.')
-            # dts is [B,K,d_inner,L]. [B,1,1,L] broadcasts over scan/channel
-            # axes only. Add BEFORE the fused kernel's unchanged bias+softplus.
-            dts = dts + beta * geometry_transition.unsqueeze(1)
         xs = xs.float().view(B, -1, L)
         dts = dts.contiguous().float().view(B, -1, L)  # (b, k * d, l)
         Bs = Bs.float().view(B, K, -1, L)
@@ -411,10 +396,10 @@ class Selective_Scan(nn.Module):
 
         return out_y[:, 0]
 
-    def forward(self, x: torch.Tensor, prompt, geometry_transition=None, beta=None, **kwargs):
+    def forward(self, x: torch.Tensor, prompt, **kwargs):
         b, l, c = prompt.shape
         prompt = prompt.permute(0, 2, 1).contiguous().view(b, 1, c, l)
-        y = self.forward_core(x, prompt, geometry_transition, beta)  # [B, L, C]
+        y = self.forward_core(x, prompt)  # [B, L, C]
         y = y.permute(0, 2, 1).contiguous()
         return y
 
@@ -518,8 +503,7 @@ class AttentiveLayer(nn.Module):
         # part2: Attentive State Space
         shortcut = x
         x_aca = self.assm(self.norm3(x), x_size, self.embeddingA,
-                          depth=params.get('depth'), confidence=params.get('confidence'),
-                          enable_gtss=params.get('enable_gtss', False)) + x
+                          geometry_route_bias=params.get("geometry_route_bias")) + x
         x = x_aca + self.convffn2(self.norm4(x_aca), x_size)
         x = shortcut * self.scale2 + x
 
@@ -800,7 +784,6 @@ class UpsampleOneStep(nn.Sequential):
         return flops
 
 
-@ARCH_REGISTRY.register()
 class MambaIRv2(nn.Module):
     def __init__(self,
                  img_size=64,
@@ -1081,4 +1064,3 @@ if __name__ == '__main__':
     _input = torch.randn([2, 3, 64, 64]).cuda()
     output = model(_input).cuda()
     print(output.shape)
-
